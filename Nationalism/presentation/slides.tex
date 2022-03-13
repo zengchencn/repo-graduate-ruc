@@ -5,6 +5,8 @@
 \usepackage{graphicx}
 \usepackage{amsmath}
 
+
+
 \title[Necessary Conditions of Political Unification]{External Threats, Linguistic Homogeneity, and Political Unification}
 \author{Chen Zeng}
 \institute[]{Department of Political Science \\ Renmin University of China}
@@ -69,13 +71,20 @@
 			\item[Hypothesis 1] External threats are \textit{necessary} for political unification.
 			\item[Hypothesis 2] Linguistic homogeneity is \textit{necessary} for political unification.
 		\end{description}
+		\begin{itemize}
+			\item The article takes on the form of a \textit{falsification} probe and focuses on only \textit{necessary} conditions for political unification.
+			\item That is to say that security threats or linguistic homogeneity may not be \textit{sufficient} for political unification, but the lack of either condition cannot result in the expected outcome.
+			\item This method is prone to many methodological and substantive vulnerabilities. We will cover them in the final section, but now, let's take a look into why the author sets those two key explanatory variables.
+		\end{itemize}
 	\end{frame}
 
 
 
 	\subsection{External Security Threats}
 	\begin{frame}{External Security Threats}
-
+		\begin{itemize}
+			\item Riker (1975) argues that states unify for security reasons; they desire protection from external threats
+		\end{itemize}
 	\end{frame}
 	\subsection{Linguistic Homogeneity}
 	\section{Exploratory Analysis and Causal Inference}
@@ -83,6 +92,40 @@
 		hi
 	\end{frame}
 	\section{Reflections}
+	\begin{frame}{Reflections}
+		In the following subsections, we set let \textit{U} denote political unification, \textit{S} external security threats, and \textit{L} linguistic homogeneity.
+		\begin{itemize}
+			\item From previous analysis, the author detected 12 cases of political unification from the MID dataset, where linguistic homogeneity is present in all cases. Incorporating the Switzerland case as an outlier, we have 13 cases in total. Mathematically, we have
+			\begin{equation}
+				P(L|U)=\frac{12}{13} \approx 0.92
+			\end{equation}
+			\item According to Bayes theorem, we have 
+			\begin{equation}
+				P(U|L)=\frac{P(U)P(L|U)}{P(L)}
+			\end{equation}
+		\end{itemize}
+	\end{frame}
+	\begin{frame}{Reflections}
+		\begin{itemize}
+			\item Since $P(U)$ and $P(L)$ have the same denominator, we can simplify the equation as
+			\begin{equation}
+				P(U|L)=\frac{N(U)P(L|U)}{N(L)}
+			\end{equation}
+			whereas $N(U)=12$, as per previous discussion.
+			\item Only considering all 6 UN official languages, we have
+			\begin{equation}
+%				EN: 19, ES: 20, FR: 29, RU: 5, AR: 22, ZH: 2
+				\begin{aligned}
+					N(L)< & N(EN)^2 + N(ES)^2 + N(FR)^2 + N(ZH)^2 + \\
+					& N(RU)^2 + N(AR)^2 = 2115
+				\end{aligned}
+			\end{equation}
+			\item Furthermore, we calculate the probability of political unification given the presence of linguistic homogeneity.
+			\begin{equation}
+				P(U|L)=\frac{N(U)P(L|U)}{N(L)}<\frac{12\times 0.92}{2115}\approx 0.52\%
+			\end{equation}
+		\end{itemize}
+	\end{frame}
 	\subsection{The Fundamental Problem of Causal Inference}
 	\subsection{Selection Bias}
 	\begin{frame}{Selection bias}
@@ -97,6 +140,11 @@
 		$x \sim \mathcal{N}(\mu,\,\sigma^{2})$
 	\end{frame}
 	\begin{frame}{Alternative research design -- Logistic Regression}
-		$x \sim \mathcal{N}(\mu,\,\sigma^{2})$
+		\begin{equation}
+			logit(P(U))=\beta_0 + \beta_1 \times S + \beta_2 \times L
+		\end{equation}
+		\begin{equation}
+			logit(P(U))=\beta_0 + \beta_1 \times S + \beta_2 \times L + \beta_3 \times S \times L
+		\end{equation}
 	\end{frame}
 \end{document}
