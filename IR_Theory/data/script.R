@@ -3,9 +3,36 @@ library(haven)
 
 setwd("~/Workspace/repo-graduate-ruc/IR_Theory/data/")
 
-dyad <- read_dta("dyadic_mid_4.02.dta")
+dmid <- read_dta("dyadic_mid_4.02.dta")
 # MIDB <- read_csv("MIDB_3.10.csv")
 MIDB <- read_dta("MIDB 5.0.dta")
+
+aggr <- dmid %>% filter(sideaa == 1) %>%
+  select(disno, namea, nameb, strtyr, endyear, fatlev)
+
+conflict_1y <- aggr %>% filter(strtyr == endyear) %>%
+  mutate(year = strtyr, dura = 1) %>%
+  select(-c(strtyr, endyear))
+
+conflict_my <- aggr %>% filter(strtyr != endyear) %>%
+  group_by(disno, namea, nameb) %>%
+  summarize(fatlev = max(fatlev),
+            strtyr = max(strtyr),
+            endyear = max(endyear)) %>%
+  mutate(dura = endyear - strtyr + 1)
+
+mytmp <- data.frame()
+
+for(i in 1:nrow(conflict_my)) {
+  submy <- conflict_my[i,]
+  multiyear <- submy$dura
+  submy <- submy %>% slice(rep(1:n(), each = multiyear))
+  submy$year <- submy$strtyr:submy$endyear
+  mytmp <- rbind(mytmp,
+                 submy)
+}
+
+conflict_my <- mytmp %>% select(-c(strtyr, endyear))
 
 states <- read_csv("states2016.csv") %>% 
   select(stateabb, ccode, statenme, styear, endyear)
@@ -45,9 +72,24 @@ for(i in 1:nrow(states_vivo)) {
   states_vivo$country_exists[i] <- country_exists
 }
 
-heads <- head(dyads) %>%
-  mutate(valid_A = states_vivo[states_vivo$st_name == st_A &
-                                 states_vivo$year == year,]$country_exists[1])
-res <- states_vivo %>% filter(country_exists==T) %>%
-  group_by(year) %>%
-  summarize(cnt = n() * n())
+states_vivo <- states_vivo %>% filter(country_exists == T) %>%
+  select(-country_exists)
+
+tmp <- states_vivo %>% group_by(year) %>%
+  summarize(count = n())
+
+dyads <- data.frame()
+
+for (i in 1816:2016) {
+  subst <- states_vivo %>% filter(year == i)
+  ttl <- nrow(subst)
+  countries <- subst$st_name
+  st_A <- rep(countries, each = ttl)
+  st_B <- rep(countries, times = ttl)
+  res <- data.frame(st_A = st_A, st_B = st_B, year = i)
+  dyads <- rbind(dyads, res)
+}
+
+dyads <- dyads %>% filter(st_A != st_B)
+
+
