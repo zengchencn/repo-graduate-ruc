@@ -5,6 +5,9 @@ library(data.table)
 library(dtplyr)
 library(geosphere)
 library(readxl)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
 
 # Key variables:
 #   conflicts: conflicts with fatal level in a dyad
@@ -180,8 +183,8 @@ dyads_dist$cap_dist <- geodist(dyads_dist$lng_A, dyads_dist$lat_A,
 dyads_dist <- dyads_dist %>%
   mutate(cap_dist = geodist(lng_A, lat_A, lng_B, lat_B)) %>%
   mutate(lndist = log(cap_dist)) %>%
-  filter(cap_dist != 0) %>%
-  select(-c(lat_A, lng_A, lat_B, lng_B))
+  filter(cap_dist != 0)
+  # select(-c(lat_A, lng_A, lat_B, lng_B))
 
 dyads_dist_polity <- left_join(dyads_dist, polity,
                                c("st_A" = "scode", "year" = "year")) %>%
@@ -236,34 +239,185 @@ dyads_gp <- left_join(dyads_dist, great_power,
                         "year" = "year")) %>%
   mutate(great_power = replace(great_power, is.na(great_power), 0))
 
-alliance <- read_csv("alliance_v4.1_by_directed_yearly.csv") %>%
+alliance <- read_csv("alliance_v4.1_by_dyad_yearly.csv") %>%
   select(ccode1, ccode2, year)
 
 alliance <- left_join(alliance, states[, 1:2], by = c("ccode1" = "ccode")) %>%
   rename(st_A = stateabb)
 alliance <- left_join(alliance, states[, 1:2], by = c("ccode2" = "ccode")) %>%
   rename(st_B = stateabb) %>%
-  select(st_A, st_B, year) %>%
-  mutate(dyadic_alliance = 1)
+  select(st_A, st_B, year)
 
-dyads_dy_alliance <- left_join(dyads_gp, alliance, by = c(st_A, st_B, year))
+gp_alliance <- left_join(alliance, great_power,
+                         by = c("st_A" = "stateabb", "year" = "year")) %>%
+  rename(gp_alliance = great_power)
 
-mdl1 <- glm(MID ~ log(cap_dist) + polity + contiguity + great_power,
-            data = dyads_gp, family = "binomial")
-dyads_preww1 <- dyads_gp %>% filter(year <= 1918)
-mdl2 <- glm(MID ~ log(cap_dist) + polity + contiguity + great_power,
+dyads_dy_alliance <- left_join(dyads_gp, gp_alliance,
+                               by = c("st_A" = "st_A",
+                                      "st_B" = "st_B",
+                                      "year" = "year")) %>%
+  mutate(gp_alliance = replace(gp_alliance, is.na(gp_alliance), 0))
+
+mdl1 <- glm(MID ~ log(cap_dist) + polity + contiguity + great_power + gp_alliance,
+            data = dyads_dy_alliance, family = "binomial")
+dyads_preww1 <- dyads_dy_alliance %>% filter(year <= 1918)
+mdl2 <- glm(MID ~ log(cap_dist) + polity + contiguity + great_power + gp_alliance,
             data = dyads_preww1, family = "binomial")
-dyads_interwar <- dyads_gp %>% filter(year > 1918 & year <= 1945)
-mdl3 <- glm(MID ~ log(cap_dist) + polity + contiguity + great_power,
+dyads_interwar <- dyads_dy_alliance %>% filter(year > 1918 & year <= 1945)
+mdl3 <- glm(MID ~ log(cap_dist) + polity + contiguity + great_power + gp_alliance,
             data = dyads_interwar, family = "binomial")
-dyads_coldwar <- dyads_gp %>% filter(year > 1945 & year <= 1991)
-mdl4 <- glm(MID ~ log(cap_dist) + polity + contiguity + great_power,
+dyads_coldwar <- dyads_dy_alliance %>% filter(year > 1945 & year <= 1991)
+mdl4 <- glm(MID ~ log(cap_dist) + polity + contiguity + great_power + gp_alliance,
             data = dyads_coldwar, family = "binomial")
-dyads_end <- dyads_gp %>% filter(year > 1991)
-mdl5 <- glm(MID ~ log(cap_dist) + polity + contiguity + great_power,
+dyads_end <- dyads_dy_alliance %>% filter(year > 1991)
+mdl5 <- glm(MID ~ log(cap_dist) + polity + contiguity + great_power + gp_alliance,
             data = dyads_end, family = "binomial")
 stargazer(mdl1, mdl2, mdl3, mdl4, mdl5,
           type = "text")
-summary(mdl4)
+
+conflicts_coord <- dyads_gp %>% filter(MID == 1) %>%
+  select(year, lat_A, lat_B, lng_A, lng_B)
+
+jitter_sd <- 0.5
+conflicts_coord$lat_A <- conflicts_coord$lat_A +
+  rnorm(nrow(conflicts_coord), 0, jitter_sd)
+conflicts_coord$lng_A <- conflicts_coord$lng_A +
+  rnorm(nrow(conflicts_coord), 0, jitter_sd)
+conflicts_coord$lat_B <- conflicts_coord$lat_B +
+  rnorm(nrow(conflicts_coord), 0, jitter_sd)
+conflicts_coord$lng_B <- conflicts_coord$lng_B +
+  rnorm(nrow(conflicts_coord), 0, jitter_sd)
+
+pair_A <- conflicts_coord %>% select(year, lat_A, lng_A)
+pair_A <- pair_A %>% mutate(pair = 1:nrow(pair_A)) %>%
+  rename(lat = lat_A, lng = lng_A)
+pair_B <- conflicts_coord %>% select(year, lat_B, lng_B)
+pair_B <- pair_B %>% mutate(pair = 1:nrow(pair_B)) %>%
+  rename(lat = lat_B, lng = lng_B)
+
+pairs <- rbind(pair_A, pair_B)
+
+pairs_preww1 <- pairs %>% filter(year <= 1918) %>%
+  mutate(cat = "Pre-WW1")
+pairs_interwar <- pairs %>% filter(year > 1918 & year <= 1945) %>%
+  mutate(cat = "Interwar")
+pairs_coldwar <- pairs %>% filter(year > 1945 & year <= 1991) %>%
+  mutate(cat = "Cold War")
+pairs_post1992 <- pairs %>% filter(year >= 1992) %>%
+  mutate(cat = "Post-1992")
+pairs <- rbind(pairs_preww1, pairs_interwar, pairs_coldwar, pairs_post1992)
+
+
+
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+plot_all <- ggplot(data = world) +
+  geom_sf(size = 0.2) +
+  geom_line(data = pairs, aes(x = lng, y = lat, group = pair, color = cat),
+            size = .1) +
+  theme_bw() +
+  ggtitle("Global Militarized Interstate Disputes",
+          subtitle = "1816 - 2016") +
+  coord_sf(xlim = c(-180, 180), ylim = c(-90, 90), expand = F) +
+  theme(panel.grid.major = element_line(color = gray(.5),
+                                        linetype = "dashed", size = 0.5),
+        panel.background = element_rect(fill = "white")) +
+  scale_colour_viridis_d(limits = c("Pre-WW1", "Interwar",
+                                    "Cold War", "Post-1992"), direction = -1) +
+  guides(color = guide_legend(override.aes = list(size = 1), 
+                              title = "Time Scope")) +
+  xlab("Longitude") +
+  ylab("Latitude")
+
+# Pre WWI
+plot_preww1 <- ggplot(data = world) +
+  geom_sf(size = 0.2) +
+  geom_line(data = pairs_preww1, aes(x = lng, y = lat, group = pair),
+            size = .1, color = "red") +
+  theme_bw() +
+  ggtitle("Global Militarized Interstate Disputes",
+          subtitle = "1816 - 1918") +
+  scale_fill_viridis_c(option = "plasma", trans = "sqrt") + 
+  coord_sf(xlim = c(-180, 180), ylim = c(-90, 90), expand = F) +
+  theme(panel.grid.major = element_line(color = gray(.5),
+                                        linetype = "dashed", size = 0.5),
+        panel.background = element_rect(fill = "white")) +
+  scale_colour_viridis_d(limits = c("Pre-WW1", "Interwar",
+                                    "Cold War", "Post-1992")) +
+  guides(color = guide_legend(override.aes = list(size = 1), 
+                              title = "Time Scope")) +
+  xlab("Longitude") +
+  ylab("Latitude")
+
+# Interwar and WWII
+plot_interwar <- ggplot(data = world) +
+  geom_sf(size = 0.2) +
+  geom_line(data = pairs_interwar, aes(x = lng, y = lat, group = pair),
+            size = .1, color = "red") +
+  theme_bw() +
+  ggtitle("Global Militarized Interstate Disputes",
+          subtitle = "Interwar and WWII") +
+  scale_fill_viridis_c(option = "plasma", trans = "sqrt") + 
+  coord_sf(xlim = c(-180, 180), ylim = c(-90, 90), expand = F) +
+  theme(panel.grid.major = element_line(color = gray(.5),
+                                        linetype = "dashed", size = 0.5),
+        panel.background = element_rect(fill = "white")) +
+  scale_colour_viridis_d(limits = c("Pre-WW1", "Interwar",
+                                    "Cold War", "Post-1992")) +
+  guides(color = guide_legend(override.aes = list(size = 1), 
+                              title = "Time Scope")) +
+  xlab("Longitude") +
+  ylab("Latitude")
+
+# Cold War
+plot_coldwar <- ggplot(data = world) +
+  geom_sf(size = 0.2) +
+  geom_line(data = pairs_coldwar, aes(x = lng, y = lat, group = pair),
+            size = .1, color = "red") +
+  theme_bw() +
+  ggtitle("Global Militarized Interstate Disputes",
+          subtitle = "Cold War") +
+  scale_fill_viridis_c(option = "plasma", trans = "sqrt") + 
+  coord_sf(xlim = c(-180, 180), ylim = c(-90, 90), expand = F) +
+  theme(panel.grid.major = element_line(color = gray(.5),
+                                        linetype = "dashed", size = 0.5),
+        panel.background = element_rect(fill = "white")) +
+  scale_colour_viridis_d(limits = c("Pre-WW1", "Interwar",
+                                    "Cold War", "Post-1992")) +
+  guides(color = guide_legend(override.aes = list(size = 1), 
+                              title = "Time Scope")) +
+  xlab("Longitude") +
+  ylab("Latitude")
+
+# Post 1992
+plot_post1992 <- ggplot(data = world) +
+  geom_sf(size = 0.2) +
+  geom_line(data = pairs_post1992, aes(x = lng, y = lat, group = pair),
+            size = .1, color = "red") +
+  theme_bw() +
+  ggtitle("Global Militarized Interstate Disputes",
+          subtitle = "Post-1992") +
+  scale_fill_viridis_c(option = "plasma", trans = "sqrt") + 
+  coord_sf(xlim = c(-180, 180), ylim = c(-90, 90), expand = F) +
+  theme(panel.grid.major = element_line(color = gray(.5),
+                                        linetype = "dashed", size = 0.5),
+        panel.background = element_rect(fill = "white")) +
+  scale_colour_viridis_d(limits = c("Pre-WW1", "Interwar",
+                                    "Cold War", "Post-1992")) +
+  guides(color = guide_legend(override.aes = list(size = 1), 
+                              title = "Time Scope")) +
+  xlab("Longitude") +
+  ylab("Latitude")
+
+ggsave("./output/plots/all.pdf", plot = plot_all,
+       width = 10, height = 5)
+ggsave("./output/plots/preww1.pdf", plot = plot_preww1,
+       width = 10, height = 5)
+ggsave("./output/plots/interwar.pdf", plot = plot_interwar,
+       width = 10, height = 5)
+ggsave("./output/plots/coldwar.pdf", plot = plot_coldwar,
+       width = 10, height = 5)
+ggsave("./output/plots/post1992.pdf", plot = plot_post1992,
+       width = 10, height = 5)
 
 
